@@ -69,7 +69,7 @@ def get_continent(country_code):
   for c in continents:
     if c.contains(country_code):
       return c
-  plog("INFO", country_code + " is not on any continent")
+  plog("INFO", f"{country_code} is not on any continent")
   return None
 
 def get_country(ip):
@@ -93,7 +93,7 @@ class GeoIPRouter(TorCtl.Router):
         self.continent = c.code
         self.cont_group = c.group
     else: 
-      plog("INFO", self.nickname + ": Country code not found")
+      plog("INFO", f"{self.nickname}: Country code not found")
       self.continent = None
    
   def get_ip_dotted(self):

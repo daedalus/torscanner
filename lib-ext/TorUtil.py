@@ -50,15 +50,12 @@ def quote(s):
   return re.sub(r'([\r\n\\\"])', r'\\\1', s)
 
 def escape_dots(s, translate_nl=1):
-  if translate_nl:
-    lines = re.split(r"\r?\n", s)
-  else:
-    lines = s.split("\r\n")
+  lines = re.split(r"\r?\n", s) if translate_nl else s.split("\r\n")
   if lines and not lines[-1]:
     del lines[-1]
   for i in xrange(len(lines)):
     if lines[i].startswith("."):
-      lines[i] = "."+lines[i]
+      lines[i] = f".{lines[i]}"
   lines.append(".\r\n")
   return "\r\n".join(lines)
 
@@ -72,10 +69,7 @@ def unescape_dots(s, translate_nl=1):
   if lines and lines[-1]:
     lines.append("")
 
-  if translate_nl:
-    return "\n".join(lines)
-  else:
-    return "\r\n".join(lines)
+  return "\n".join(lines) if translate_nl else "\r\n".join(lines)
 
 # XXX: Exception handling
 class BufSock:
@@ -100,8 +94,7 @@ class BufSock:
       if idx >= 0:
         self._buf.append(s[:idx+1])
         result = "".join(self._buf)
-        rest = s[idx+1:]
-        if rest:
+        if rest := s[idx + 1:]:
           self._buf = [ rest ]
         else:
           del self._buf[:]
@@ -177,13 +170,9 @@ def urandom_rng(n):
 def s2k_gen(secret, rng=None):
   """DOCDOC"""
   if rng is None:
-    if hasattr(os, "urandom"):
-      rng = os.urandom
-    else:
-      rng = urandom_rng
-  spec = "%s%s"%(rng(8), chr(96))
-  return "16:%s"%(
-    binascii.b2a_hex(spec + secret_to_key(secret, spec)))
+    rng = os.urandom if hasattr(os, "urandom") else urandom_rng
+  spec = f"{rng(8)}{chr(96)}"
+  return f"16:{binascii.b2a_hex(spec + secret_to_key(secret, spec))}"
 
 def s2k_check(secret, k):
   """DOCDOC"""
@@ -205,7 +194,7 @@ def plog(level, msg): # XXX: Timestamps
 # Stolen from
 # http://www.nmr.mgh.harvard.edu/Neural_Systems_Group/gary/python/stats.py
 def zprob(z):
-    """
+  """
 Returns the area under the normal curve 'to the left of' the given z value.
 Thus, 
     for z<0, zprob(z) = 1-tail probability
@@ -215,33 +204,29 @@ Adapted from z.c in Gary Perlman's |Stat.
 
 Usage:   lzprob(z)
 """
+  if z == 0.0:
+    x = 0.0
+  else:
+    y = 0.5 * math.fabs(z)
     Z_MAX = 6.0    # maximum meaningful z-value
-    if z == 0.0:
-        x = 0.0
+    if y >= (Z_MAX*0.5):
+        x = 1.0
+    elif (y < 1.0):
+        w = y*y
+        x = ((((((((0.000124818987 * w
+                    -0.001075204047) * w +0.005198775019) * w
+                  -0.019198292004) * w +0.059054035642) * w
+                -0.151968751364) * w +0.319152932694) * w
+              -0.531923007300) * w +0.797884560593) * y * 2.0
     else:
-        y = 0.5 * math.fabs(z)
-        if y >= (Z_MAX*0.5):
-            x = 1.0
-        elif (y < 1.0):
-            w = y*y
-            x = ((((((((0.000124818987 * w
-                        -0.001075204047) * w +0.005198775019) * w
-                      -0.019198292004) * w +0.059054035642) * w
-                    -0.151968751364) * w +0.319152932694) * w
-                  -0.531923007300) * w +0.797884560593) * y * 2.0
-        else:
-            y = y - 2.0
-            x = (((((((((((((-0.000045255659 * y
-                             +0.000152529290) * y -0.000019538132) * y
-                           -0.000676904986) * y +0.001390604284) * y
-                         -0.000794620820) * y -0.002034254874) * y
-                       +0.006549791214) * y -0.010557625006) * y
-                     +0.011630447319) * y -0.009279453341) * y
-                   +0.005353579108) * y -0.002141268741) * y
-                 +0.000535310849) * y +0.999936657524
-    if z > 0.0:
-        prob = ((x+1.0)*0.5)
-    else:
-        prob = ((1.0-x)*0.5)
-    return prob
+        y = y - 2.0
+        x = (((((((((((((-0.000045255659 * y
+                         +0.000152529290) * y -0.000019538132) * y
+                       -0.000676904986) * y +0.001390604284) * y
+                     -0.000794620820) * y -0.002034254874) * y
+                   +0.006549791214) * y -0.010557625006) * y
+                 +0.011630447319) * y -0.009279453341) * y
+               +0.005353579108) * y -0.002141268741) * y
+             +0.000535310849) * y +0.999936657524
+  return ((x+1.0)*0.5) if z > 0.0 else ((1.0-x)*0.5)
 

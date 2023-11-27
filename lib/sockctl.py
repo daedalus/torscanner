@@ -82,14 +82,8 @@ class Proxy:
         
     def recv(self):
         data = ''
-        #self.proxy.setblocking(1)
-        read = self.proxy.recv(4096)
-        #print 'aaaaaaaaaaa', len(read)
-        while read:
-                data += read
-                #print read
-                read = self.proxy.recv(4096)
-                #print 'bbbbbbb', len(read)
+        while read := self.proxy.recv(4096):
+            data += read
         return data
 '''
 class RouterManagement:

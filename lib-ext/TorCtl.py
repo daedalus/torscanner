@@ -85,7 +85,7 @@ class NetworkStatus:
     self.orport = int(orport)
     self.dirport = int(dirport)
     self.flags = flags
-    self.idhex = (self.idhash + "=").decode("base64").encode("hex").upper()
+    self.idhex = f"{self.idhash}=".decode("base64").encode("hex").upper()
     m = re.search(r"(\d+)-(\d+)-(\d+) (\d+):(\d+):(\d+)", updated)
     self.updated = datetime.datetime(*map(int, m.groups()))
 
@@ -179,7 +179,7 @@ class ExitPolicyLine:
       self.ip = 0
       self.netmask = 0
     else:
-      if not "/" in ip_mask:
+      if "/" not in ip_mask:
         self.netmask = 0xFFFFFFFF
         ip = ip_mask
       else:
@@ -203,7 +203,7 @@ class ExitPolicyLine:
      Returns true if the line is an Accept, and False if it is a Reject. """
     ip = struct.unpack(">I", socket.inet_aton(ip))[0]
     if (ip & self.netmask) == self.ip:
-      if self.port_low <= port and port <= self.port_high:
+      if self.port_low <= port <= self.port_high:
         return self.match
     return -1
 
@@ -246,7 +246,7 @@ class Router:
     self.list_rank = 0 # position in a sorted list of routers.
     self.uptime = uptime
 
-  def build_from_desc(desc, ns):
+  def build_from_desc(self, ns):
     """
     Static method of Router that parses a descriptor string into this class.
     'desc' is a full descriptor as a string. 
@@ -258,7 +258,7 @@ class Router:
     # Use http://docs.python.org/lib/profile.html to verify this is 
     # the part of startup that is slow
     exitpolicy = []
-    dead = not ("Running" in ns.flags)
+    dead = "Running" not in ns.flags
     bw_observed = 0
     version = None
     os = None
@@ -266,7 +266,7 @@ class Router:
     ip = 0
     router = "[none]"
 
-    for line in desc:
+    for line in self:
       rt = re.search(r"^router (\S+) (\S+)", line)
       fp = re.search(r"^opt fingerprint (.+).*on (\S+)", line)
       pl = re.search(r"^platform Tor (\S+).*on (\S+)", line)
@@ -277,7 +277,7 @@ class Router:
       if re.search(r"^opt hibernating 1", line):
         #dead = 1 # XXX: Technically this may be stale..
         if ("Running" in ns.flags):
-          plog("INFO", "Hibernating router "+ns.nickname+" is running..")
+          plog("INFO", f"Hibernating router {ns.nickname} is running..")
       if ac:
         exitpolicy.append(ExitPolicyLine(True, *ac.groups()))
       elif rj:
@@ -291,12 +291,11 @@ class Router:
       elif rt:
         router,ip = rt.groups()
     if router != ns.nickname:
-      plog("NOTICE", "Got different names " + ns.nickname + " vs " +
-             router + " for " + ns.idhex)
+      plog("NOTICE", f"Got different names {ns.nickname} vs {router} for {ns.idhex}")
     if not bw_observed and not dead and ("Valid" in ns.flags):
-      plog("INFO", "No bandwidth for live router " + ns.nickname)
+      plog("INFO", f"No bandwidth for live router {ns.nickname}")
     if not version or not os:
-      plog("INFO", "No version and/or OS for router " + ns.nickname)
+      plog("INFO", f"No version and/or OS for router {ns.nickname}")
     return Router(ns.idhex, ns.nickname, bw_observed, dead, exitpolicy,
         ns.flags, ip, version, os, uptime)
   build_from_desc = Callable(build_from_desc)
@@ -305,7 +304,7 @@ class Router:
     """ Somewhat hackish method to update this router to be a copy of
     'new' """
     if self.idhex != new.idhex:
-      plog("ERROR", "Update of router "+self.nickname+"changes idhex!")
+      plog("ERROR", f"Update of router {self.nickname}changes idhex!")
     self.idhex = new.idhex
     self.nickname = new.nickname
     self.bw = new.bw
@@ -323,7 +322,7 @@ class Router:
       ret = line.check(ip, port)
       if ret != -1:
         return ret
-    plog("WARN", "No matching exit line for "+self.nickname)
+    plog("WARN", f"No matching exit line for {self.nickname}")
     return False
    
 class Connection:
@@ -438,7 +437,7 @@ class Connection:
         self._handleFn(timestamp, reply)
       except:
         for code, msg, data in reply:
-            plog("WARN", "No event for: "+str(code)+" "+str(msg))
+          plog("WARN", f"No event for: {str(code)} {str(msg)}")
         self._err(sys.exc_info(), 1)
         return
 
@@ -523,13 +522,12 @@ class Connection:
         while 1:
           line = self._s.readline()
           if self._debugFile:
-            self._debugFile.write("+++ %s" % line)
+            self._debugFile.write(f"+++ {line}")
           if line in (".\r\n", ".\n", "650 OK\n", "650 OK\r\n"): 
             break
           more.append(line)
         lines.append((code, s, unescape_dots("".join(more))))
-        isEvent = (lines and lines[0][0][0] == '6')
-        if isEvent: # Need "250 OK" if it's not an event. Otherwise, end
+        if isEvent := (lines and lines[0][0][0] == '6'):
           return (isEvent, lines)
 
     # Notreached
@@ -541,7 +539,7 @@ class Connection:
       lines = amsg.split("\n")
       if len(lines) > 2:
         amsg = "\n".join(lines[:2]) + "\n"
-      self._debugFile.write(">>> %s" % amsg)
+      self._debugFile.write(f">>> {amsg}")
     self._s.write(msg)
 
   def sendAndRecv(self, msg="", expectedTypes=("250", "251")):
@@ -558,7 +556,7 @@ class Connection:
     # print lines
     for tp, msg, _ in lines:
       if tp[0] in '45':
-        raise ErrorReply("%s %s"%(tp, msg))
+        raise ErrorReply(f"{tp} {msg}")
       if tp not in expectedTypes:
         raise ProtocolError("Unexpectd message type %r"%tp)
 
@@ -602,7 +600,7 @@ class Connection:
     """
     if not kvlist:
       return
-    msg = " ".join(["%s=%s"%(k,quote(v)) for k,v in kvlist])
+    msg = " ".join([f"{k}={quote(v)}" for k,v in kvlist])
     self.sendAndRecv("SETCONF %s\r\n"%msg)
 
   def reset_options(self, keylist):
@@ -617,11 +615,12 @@ class Connection:
   def get_network_status(self, who="all"):
     """Get the entire network status list. Returns a list of
        TorCtl.NetworkStatus instances."""
-    return parse_ns_body(self.sendAndRecv("GETINFO ns/"+who+"\r\n")[0][2])
+    return parse_ns_body(self.sendAndRecv(f"GETINFO ns/{who}" + "\r\n")[0][2])
 
   def get_router(self, ns):
     """Fill in a Router class corresponding to a given NS class"""
-    desc = self.sendAndRecv("GETINFO desc/id/" + ns.idhex + "\r\n")[0][2].split("\n")
+    desc = self.sendAndRecv(f"GETINFO desc/id/{ns.idhex}" +
+                            "\r\n")[0][2].split("\n")
     return Router.build_from_desc(desc, ns)
 
 
@@ -638,12 +637,11 @@ class Connection:
       except ErrorReply:
         bad_key += 1
         if "Running" in ns.flags:
-          plog("NOTICE", "Running router "+ns.nickname+"="
-             +ns.idhex+" has no descriptor")
+          plog("NOTICE", f"Running router {ns.nickname}={ns.idhex} has no descriptor")
       except:
         traceback.print_exception(*sys.exc_info())
         continue
-  
+
     return new
 
   def get_info(self, name):
@@ -662,10 +660,7 @@ class Connection:
         k,rest = msg.split("=",1)
       except ValueError:
         raise ProtocolError("Bad info line %r",msg)
-      if more:
-        d[k] = more
-      else:
-        d[k] = rest
+      d[k] = more if more else rest
     return d
 
   def set_events(self, events, extended=False):
@@ -747,10 +742,13 @@ class Connection:
     """
     if hop:
       self.sendAndRecv("ATTACHSTREAM %d %d HOP=%d\r\n"%(streamid, circid, hop))
-      plog("DEBUG", "Attaching stream: "+str(streamid)+" to hop "+str(hop)+" of circuit "+str(circid))
+      plog(
+          "DEBUG",
+          f"Attaching stream: {str(streamid)} to hop {str(hop)} of circuit {str(circid)}",
+      )
     else:
       self.sendAndRecv("ATTACHSTREAM %d %d\r\n"%(streamid, circid))
-      plog("DEBUG", "Attaching stream: "+str(streamid)+" to circuit "+str(circid))
+      plog("DEBUG", f"Attaching stream: {str(streamid)} to circuit {str(circid)}")
 
   def close_stream(self, streamid, reason=0, flags=()):
     """DOCDOC"""
@@ -811,10 +809,7 @@ class EventHandler:
 
   def _decode1(self, body, data):
     """Unpack an event message into a type/arguments-tuple tuple."""
-    if " " in body:
-      evtype,body = body.split(" ",1)
-    else:
-      evtype,body = body,""
+    evtype,body = body.split(" ",1) if " " in body else (body, "")
     evtype = evtype.upper()
     if evtype == "CIRC":
       m = re.match(r"(\d+)\s+(\S+)(\s\S+)?(\s\S+)?(\s\S+)?", body)
@@ -833,10 +828,10 @@ class EventHandler:
         path = []
       if reason: reason = reason[8:]
       if remote: remote = remote[15:]
-      event = CircuitEvent(evtype, ident, status, path, reason, remote)
+      return CircuitEvent(evtype, ident, status, path, reason, remote)
     elif evtype == "STREAM":
       #plog("DEBUG", "STREAM: "+body)
-      m = re.match(r"(\S+)\s+(\S+)\s+(\S+)\s+(\S+):(\d+)(\sREASON=\S+)?(\sREMOTE_REASON=\S+)?(\sSOURCE=\S+)?(\sSOURCE_ADDR=\S+)?", body) 
+      m = re.match(r"(\S+)\s+(\S+)\s+(\S+)\s+(\S+):(\d+)(\sREASON=\S+)?(\sREMOTE_REASON=\S+)?(\sSOURCE=\S+)?(\sSOURCE_ADDR=\S+)?", body)
       if not m:
         raise ProtocolError("STREAM event misformatted.")
       ident,status,circ,target_host,target_port,reason,remote,source,source_addr = m.groups()
@@ -845,8 +840,18 @@ class EventHandler:
       if remote: remote = remote[15:]
       if source: source = source[8:]
       if source_addr: source_addr = source_addr[13:]
-      event = StreamEvent(evtype, ident, status, circ, target_host,
-                    int(target_port), reason, remote, source, source_addr)
+      return StreamEvent(
+          evtype,
+          ident,
+          status,
+          circ,
+          target_host,
+          int(target_port),
+          reason,
+          remote,
+          source,
+          source_addr,
+      )
     elif evtype == "ORCONN":
       m = re.match(r"(\S+)\s+(\S+)(\sAGE=\S+)?(\sREAD=\S+)?(\sWRITTEN=\S+)?(\sREASON=\S+)?(\sNCIRCS=\S+)?", body)
       if not m:
@@ -854,49 +859,41 @@ class EventHandler:
       target, status, age, read, wrote, reason, ncircs = m.groups()
 
       #plog("DEBUG", "ORCONN: "+body)
-      if ncircs: ncircs = int(ncircs[8:])
-      else: ncircs = 0
+      ncircs = int(ncircs[8:]) if ncircs else 0
       if reason: reason = reason[8:]
-      if age: age = int(age[5:])
-      else: age = 0
-      if read: read = int(read[6:])
-      else: read = 0
-      if wrote: wrote = int(wrote[9:])
-      else: wrote = 0
-      event = ORConnEvent(evtype, status, target, age, read, wrote,
-                reason, ncircs)
+      age = int(age[5:]) if age else 0
+      read = int(read[6:]) if read else 0
+      wrote = int(wrote[9:]) if wrote else 0
+      return ORConnEvent(evtype, status, target, age, read, wrote, reason,
+                         ncircs)
     elif evtype == "STREAM_BW":
       m = re.match(r"(\d+)\s+(\d+)\s+(\d+)", body)
       if not m:
         raise ProtocolError("STREAM_BW event misformatted.")
-      event = StreamBwEvent(evtype, *m.groups())
+      return StreamBwEvent(evtype, *m.groups())
     elif evtype == "BW":
       m = re.match(r"(\d+)\s+(\d+)", body)
       if not m:
         raise ProtocolError("BANDWIDTH event misformatted.")
       read, written = map(long, m.groups())
-      event = BWEvent(evtype, read, written)
+      return BWEvent(evtype, read, written)
     elif evtype in ("DEBUG", "INFO", "NOTICE", "WARN", "ERR"):
-      event = LogEvent(evtype, body)
+      return LogEvent(evtype, body)
     elif evtype == "NEWDESC":
-      event = NewDescEvent(evtype, body.split(" "))
+      return NewDescEvent(evtype, body.split(" "))
     elif evtype == "ADDRMAP":
       # TODO: Also parse errors and GMTExpiry
       m = re.match(r'(\S+)\s+(\S+)\s+(\"[^"]+\"|\w+)', body)
       if not m:
         raise ProtocolError("ADDRMAP event misformatted.")
       fromaddr, toaddr, when = m.groups()
-      if when.upper() == "NEVER":  
-        when = None
-      else:
-        when = time.strptime(when[1:-1], "%Y-%m-%d %H:%M:%S")
-      event = AddrMapEvent(evtype, fromaddr, toaddr, when)
+      when = (None if when.upper() == "NEVER" else time.strptime(
+          when[1:-1], "%Y-%m-%d %H:%M:%S"))
+      return AddrMapEvent(evtype, fromaddr, toaddr, when)
     elif evtype == "NS":
-      event = NetworkStatusEvent(evtype, parse_ns_body(data))
+      return NetworkStatusEvent(evtype, parse_ns_body(data))
     else:
-      event = UnknownEvent(evtype, body)
-
-    return event
+      return UnknownEvent(evtype, body)
 
   def heartbeat_event(self, event):
     """Called before any event is recieved. Convenience function

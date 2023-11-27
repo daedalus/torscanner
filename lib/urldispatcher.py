@@ -33,30 +33,28 @@ class urlDispatcher:
 
     def submit(self, url):
         self.lock.acquire()
-            
+
         if url in self.urls:
-            common.log('URL "%s" already exists in list' % url)
+            common.log(f'URL "{url}" already exists in list')
             # It doesnt fail, because it is currently working on URL
             self.lock.release()
             return True
-        
+
         if (self.counter.todo + self.counter.work) >= int(self.opt['maxurls']):
             common.log('URL queue is full. Wait a moment and try again.')
             self.lock.release()
             return False
-        
+
         self.urls[url] = _url(url, urldisp=self)
         self.counter.todo += 1
-        
+
         #common.log('URL "%s" added to list' % url, 'INFO')
         self.lock.release()
         return True
     
     # Get instance of Url class from url queue for specified url
     def get(self, url):
-        if url in self.urls:
-            return self.urls[url]
-        return None    
+        return self.urls[url] if url in self.urls else None    
         
     # Select one URL and mark it as STATUS_WORK
     def getOne(self, markAsWork = True):

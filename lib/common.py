@@ -5,12 +5,12 @@ import threading
 
 def log(text, level='INFO'):
     if level == 'INFO':
-        print('>>> %s' % text)
+        print(f'>>> {text}')
     elif level == 'ERROR':
         #print '\033[0;1m!!! Error: %s\033[m' % text
-        print('!!! Error: %s' % text)
+        print(f'!!! Error: {text}')
     elif level == 'CMD':
-        print('### %s' % text)
+        print(f'### {text}')
     else:
         print(text)
 
@@ -34,12 +34,11 @@ def mergeOptions(config, options):
     log('Using config directives:', 'INFO')
     for i,x in config.items('global'):
         try:
-            v = eval('options.%s'%i)
-            if v != None: out[i] = v
-            else: out[i] = x
+            v = eval(f'options.{i}')
+            out[i] = v if v != None else x
         except AttributeError:
             out[i] = x
-        log('\t%s: %s' % (i, out[i]), 'INFO') 
+        log('\t%s: %s' % (i, out[i]), 'INFO')
     return out
     
 def parseConfig(cfgs, defaults):
@@ -60,7 +59,7 @@ def selectDatadir(datadirs):
     for ddir in datadirs:
         ddir = os.path.abspath(os.path.expanduser(ddir))
         if os.path.exists(ddir) and os.path.os.access(ddir, os.W_OK):
-            log("Using data directory '%s'." % ddir)
+            log(f"Using data directory '{ddir}'.")
             return ddir
     raise Exception, 'No datadir with writing access available!'
 

@@ -31,20 +31,16 @@ class avgrw:
     def add(self, read, written):
         self.readList.append(read)
         self.writtenList.append(written)
-        
+
         if len(self.readList) > self.period:
             self.readList.pop(0)
         if len(self.writtenList) > self.period:
             self.writtenList.pop(0)
 
-        self.read = 0
-        for i in self.readList:
-            self.read += i
+        self.read = sum(self.readList)
         self.read = self.read / float(len(self.readList))
 
-        self.written = 0
-        for i in self.writtenList:
-            self.written += i
+        self.written = sum(self.writtenList)
         self.written = self.written / float(len(self.writtenList))
 
 class BWHandler(EventHandler):

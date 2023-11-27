@@ -69,32 +69,34 @@ class pathDispatcher:
             
             # Dont touch paths to known exit routers
             if e.idhex in self.paths: continue
-            
+
             # For current exit node, select three random relays (without repeats!)
             route = []
             rels = self.relays[:] # Copy of original set of relays
-            for i in range(int(self.opt['pathlength'])):
+            for _ in range(int(self.opt['pathlength'])):
                 rel = random.choice(rels)
                 rels.remove(rel)
                 route.append(rel)
-                
+
             # Create new Path object
             self.paths[e.idhex] = pathClass(e, route)
         
     def _filterRouters(self, routers):
-        exitflags = common.string2list(self.opt['exitflags']) 
+        exitflags = common.string2list(self.opt['exitflags'])
         relayflags = common.string2list(self.opt['relayflags'])
         relayuptime = int(self.opt['relayuptime'])
 
         exits = []
         relays = []
         for i in routers:
-            if not (False in (f in i.flags for f in exitflags)):
+            if False not in (f in i.flags for f in exitflags):
                 exits.append(i)
                 continue
-            
-            if not (False in (f in i.flags for f in relayflags)) \
-                and i.uptime > relayuptime:
+
+            if (
+                False not in (f in i.flags for f in relayflags)
+                and i.uptime > relayuptime
+            ):
                 relays.append(i)
 
         return (relays, exits)

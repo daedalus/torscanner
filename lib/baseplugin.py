@@ -63,7 +63,6 @@ class BasePlugin():
     # Override this in your custom plugin.
     def checkLink(self, link):
         raise ImportError, 'You have to override checkLink() function!'
-        return True
 
     # Phase 2
     # Should obtain link using specified socket connection.
@@ -85,5 +84,4 @@ class BasePlugin():
     # Override this in your custom plugin.
     def getRules(self):
         raise ImportError, 'You have to override getRules() function!'
-        return []
         

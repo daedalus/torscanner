@@ -156,7 +156,7 @@ class RouterManagement:
         exitflags = ['Exit', 'Running', 'Valid']
         relayflags = ['Running', 'Valid', 'Fast']
         relay_uptime = 86400
-        
+
         exits = []
         relays = []
         for i in routers:
@@ -165,12 +165,14 @@ class RouterManagement:
                 print i.exitpolicy
                 print i.flags
                 print i.down'''
-            if not (False in (f in i.flags for f in exitflags)):
+            if False not in (f in i.flags for f in exitflags):
                 exits.append(i)
-                    
-            if 'Exit' not in i.flags and \
-                not (False in (f in i.flags for f in relayflags)) \
-                and i.uptime > relay_uptime:
+
+            if (
+                'Exit' not in i.flags
+                and False not in (f in i.flags for f in relayflags)
+                and i.uptime > relay_uptime
+            ):
                 relays.append(i)
 
         return (relays, exits)

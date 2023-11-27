@@ -80,9 +80,7 @@ class NodeRestrictionList:
 
   def r_is_ok(self, r):
     "Returns true of Router 'r' passes all of the contained restrictions"
-    for rs in self.restrictions:
-      if not rs.r_is_ok(r): return False
-    return True
+    return all(rs.r_is_ok(r) for rs in self.restrictions)
 
   def add_restriction(self, restr):
     "Add a NodeRestriction 'restr' to the list of restrictions"
@@ -112,10 +110,7 @@ class PathRestrictionList:
   
   def path_is_ok(self, path):
     "Given list if Routers in 'path', check it against each restriction."
-    for rs in self.restrictions:
-      if not rs.path_is_ok(path):
-        return False
-    return True
+    return all(rs.path_is_ok(path) for rs in self.restrictions)
 
   def add_restriction(self, rstr):
     "Add a PathRestriction 'rstr' to the list"
@@ -230,7 +225,8 @@ class OSRestriction(NodeRestriction):
 class ConserveExitsRestriction(NodeRestriction):
   "Restriction to reject exits from selection"
   # XXX: Make this adaptive by ip/port
-  def r_is_ok(self, r): return not "Exit" in r.flags
+  def r_is_ok(self, r):
+    return "Exit" not in r.flags
 
 class FlagsRestriction(NodeRestriction):
   "Restriction for mandatory and forbidden router flags"
@@ -242,10 +238,8 @@ class FlagsRestriction(NodeRestriction):
 
   def r_is_ok(self, router):
     for m in self.mandatory:
-      if not m in router.flags: return False
-    for f in self.forbidden:
-      if f in router.flags: return False
-    return True
+      if m not in router.flags: return False
+    return all(f not in router.flags for f in self.forbidden)
 
 class NickRestriction(NodeRestriction):
   """Require that the node nickname is as specified"""
@@ -258,10 +252,7 @@ class NickRestriction(NodeRestriction):
 class IdHexRestriction(NodeRestriction):
   """Require that the node idhash is as specified"""
   def __init__(self, idhex):
-    if idhex[0] == '$':
-      self.idhex = idhex[1:].upper()
-    else:
-      self.idhex = idhex.upper()
+    self.idhex = idhex[1:].upper() if idhex[0] == '$' else idhex.upper()
 
   def r_is_ok(self, router):
     return router.idhex == self.idhex
@@ -282,10 +273,7 @@ class VersionIncludeRestriction(NodeRestriction):
   def r_is_ok(self, router):
     """Returns true if the version of 'router' matches one of the 
      specified versions."""
-    for e in self.eq:
-      if e == router.version:
-        return True
-    return False
+    return any(e == router.version for e in self.eq)
 
 class VersionExcludeRestriction(NodeRestriction):
   """Require that the version not match one in the list"""
@@ -296,17 +284,13 @@ class VersionExcludeRestriction(NodeRestriction):
   def r_is_ok(self, router):
     """Returns false if the version of 'router' matches one of the 
      specified versions."""
-    for e in self.exclude:
-      if e == router.version:
-        return False
-    return True
+    return all(e != router.version for e in self.exclude)
 
 class VersionRangeRestriction(NodeRestriction):
   """Require that the versions be inside a specified range""" 
   def __init__(self, gr_eq, less_eq=None):
     self.gr_eq = TorCtl.RouterVersion(gr_eq)
-    if less_eq: self.less_eq = TorCtl.RouterVersion(less_eq)
-    else: self.less_eq = None
+    self.less_eq = TorCtl.RouterVersion(less_eq) if less_eq else None
   
   def r_is_ok(self, router):
     return (not self.gr_eq or router.version >= self.gr_eq) and \
@@ -337,10 +321,7 @@ class OrNodeRestriction(MetaNodeRestriction):
 
   def r_is_ok(self, r):
     "Returns true if one of 'rs' is true for this router"
-    for rs in self.rstrs:
-      if rs.r_is_ok(r):
-        return True
-    return False
+    return any(rs.r_is_ok(r) for rs in self.rstrs)
 
 class NotNodeRestriction(MetaNodeRestriction):
   """Negates a single restriction"""
@@ -357,12 +338,8 @@ class AtLeastNNodeRestriction(MetaNodeRestriction):
     self.n = n
 
   def r_is_ok(self, r):
-    cnt = 0
-    for rs in self.rstrs:
-      if rs.r_is_ok(r):
-        cnt += 1
-    if cnt < self.n: return False
-    else: return True
+    cnt = sum(1 for rs in self.rstrs if rs.r_is_ok(r))
+    return cnt >= self.n
 
 
 #################### Path Restrictions #####################
@@ -373,19 +350,13 @@ class Subnet16Restriction(PathRestriction):
   def path_is_ok(self, path):
     mask16 = struct.unpack(">I", socket.inet_aton("255.255.0.0"))[0]
     ip16 = path[0].ip & mask16
-    for r in path[1:]:
-      if ip16 == (r.ip & mask16):
-        return False
-    return True
+    return all(ip16 != r.ip & mask16 for r in path[1:])
 
 class UniqueRestriction(PathRestriction):
   """Path restriction that mandates that the same router can't appear more
      than once in a path"""
   def path_is_ok(self, path):
-    for i in xrange(0,len(path)):
-      if path[i] in path[:i]:
-        return False
-    return True
+    return all(path[i] not in path[:i] for i in xrange(0, len(path)))
 
 #################### GeoIP Restrictions ###################
 
@@ -408,7 +379,7 @@ class ExcludeCountriesRestriction(NodeRestriction):
     self.countries = countries
 
   def r_is_ok(self, r):
-    return not (r.country_code in self.countries)
+    return r.country_code not in self.countries
 
 class UniqueCountryRestriction(PathRestriction):
   """ Ensure every router to have a distinct country_code """
@@ -423,10 +394,7 @@ class SingleCountryRestriction(PathRestriction):
   """ Ensure every router to have the same country_code """
   def path_is_ok(self, path):
     country_code = path[0].country_code
-    for r in path:
-      if country_code != r.country_code:
-        return False
-    return True
+    return all(country_code == r.country_code for r in path)
 
 class ContinentRestriction(PathRestriction):
   """ Do not more than n continent crossings """
@@ -444,8 +412,7 @@ class ContinentRestriction(PathRestriction):
         if r.continent != prev.continent:
           crossings += 1
       prev = r
-    if crossings > self.n: return False
-    else: return True
+    return crossings <= self.n
 
 class ContinentJumperRestriction(PathRestriction):
   """ Ensure continent crossings between all hops """
@@ -484,8 +451,7 @@ class OceanPhobicRestriction(PathRestriction):
         if r.cont_group != prev.cont_group:
           crossings += 1
       prev = r
-    if crossings > self.n: return False
-    else: return True
+    return crossings <= self.n
 
 #################### Node Generators ######################
 
@@ -567,23 +533,16 @@ class BwWeightedGenerator(NodeGenerator):
             self.total_exit_bw += r.bw
 
       bw_per_hop = (1.0*self.total_bw)/self.pathlen
-      if self.total_bw > 0:
-        ratio = self.total_exit_bw/float(self.total_bw)
-      else: ratio = 0
-      plog("DEBUG", "E = " + str(self.total_exit_bw) +
-         ", T = " + str(self.total_bw) +
-         ", ratio = " + str(ratio) +
-         ", bw_per_hop = " + str(bw_per_hop))
-      
-      if self.total_exit_bw < bw_per_hop:
-        # Don't use exit nodes at all
-        # add a ConserveExitsRestriction?
-        self.weight = 0
-      else:
-        if self.total_exit_bw > 0:
-          self.weight = ((self.total_exit_bw-bw_per_hop)/self.total_exit_bw)
-        else: self.weight = 0
-    plog("DEBUG", "The exit-weight is: " + str(self.weight))
+      ratio = self.total_exit_bw/float(self.total_bw) if self.total_bw > 0 else 0
+      plog(
+          "DEBUG",
+          f"E = {str(self.total_exit_bw)}, T = {str(self.total_bw)}, ratio = {str(ratio)}, bw_per_hop = {str(bw_per_hop)}",
+      )
+
+      if self.total_exit_bw >= bw_per_hop and self.total_exit_bw > 0:
+        self.weight = ((self.total_exit_bw-bw_per_hop)/self.total_exit_bw)
+      else: self.weight = 0
+    plog("DEBUG", f"The exit-weight is: {str(self.weight)}")
 
   def next_r(self):
     while True:
@@ -600,11 +559,9 @@ class BwWeightedGenerator(NodeGenerator):
         if i < 0: break
         if self.rstr_list.r_is_ok(r):
           # Only weight exit nodes
-          if "Exit" in r.flags:
-            i -= self.weight * r.bw
-          else: i -= r.bw
+          i -= self.weight * r.bw if "Exit" in r.flags else r.bw
           if i < 0:
-            plog("DEBUG", "Chosen router with a bandwidth of: " + str(r.bw))
+            plog("DEBUG", f"Chosen router with a bandwidth of: {str(r.bw)}")
             yield r
 
 ####################### Secret Sauce ###########################
@@ -645,8 +602,7 @@ class PathSelector:
           path = [ext.next()]
         else:
           path.append(entry.next())
-          for i in xrange(1, pathlen-1):
-            path.append(mid.next())
+          path.extend(mid.next() for _ in xrange(1, pathlen-1))
           path.append(ext.next())
         if self.path_restrict.path_is_ok(path):
           self.entry_gen.mark_chosen(path[0])
@@ -696,10 +652,10 @@ class SelectionManager:
     else:
       self.path_rstr = PathRestrictionList(
            [Subnet16Restriction(), UniqueRestriction()])
-  
+
     if self.use_guards: entry_flags = ["Guard", "Valid", "Running"]
     else: entry_flags = ["Valid", "Running"]
-      
+
     entry_rstr = NodeRestrictionList(
       [PercentileRestriction(self.percent_skip, self.percent_fast, sorted_r),
        ConserveExitsRestriction(),
@@ -732,7 +688,7 @@ class SelectionManager:
       entry_rstr.add_restriction(CountryCodeRestriction())
       mid_rstr.add_restriction(CountryCodeRestriction())
       self.exit_rstr.add_restriction(CountryCodeRestriction())
-      
+
       # Specified countries for different positions
       if self.geoip_config.entry_country:  
         entry_rstr.add_restriction(CountryRestriction(self.geoip_config.entry_country))
@@ -743,12 +699,12 @@ class SelectionManager:
 
       # Excluded countries
       if self.geoip_config.excludes:
-        plog("INFO", "Excluded countries: " + str(self.geoip_config.excludes))
+        plog("INFO", f"Excluded countries: {str(self.geoip_config.excludes)}")
         if len(self.geoip_config.excludes) > 0:
           entry_rstr.add_restriction(ExcludeCountriesRestriction(self.geoip_config.excludes))
           mid_rstr.add_restriction(ExcludeCountriesRestriction(self.geoip_config.excludes))
           self.exit_rstr.add_restriction(ExcludeCountriesRestriction(self.geoip_config.excludes))      
-      
+
       # Unique countries set? None --> pass
       if self.geoip_config.unique_countries != None:
         if self.geoip_config.unique_countries:
@@ -757,9 +713,9 @@ class SelectionManager:
         else:
           # False: use the same country for all nodes in a path
           self.path_rstr.add_restriction(SingleCountryRestriction())
-      
+
       # Specify max number of continent crossings, None means UniqueContinents
-      if self.geoip_config.continent_crossings == None:
+      if self.geoip_config.continent_crossings is None:
         self.path_rstr.add_restriction(UniqueContinentRestriction())
       else: self.path_rstr.add_restriction(ContinentRestriction(self.geoip_config.continent_crossings))
       # Should even work in combination with continent crossings
@@ -773,7 +729,7 @@ class SelectionManager:
         exitgen.reset_restriction(self.exit_rstr)
       else:
         exitgen = self.__ordered_exit_gen = \
-          OrderedExitGenerator(80, sorted_r, self.exit_rstr)
+            OrderedExitGenerator(80, sorted_r, self.exit_rstr)
     elif self.uniform:
       # 'real' exits should also be chosen when not using 'order_exits'
       self.exit_rstr.add_restriction(ExitPolicyRestriction("255.255.255.255", 80)) 
@@ -806,13 +762,12 @@ class SelectionManager:
     # needs an IP != 255.255.255.255
     if self.geoip_config and self.geoip_config.echelon:
       import GeoIPSupport
-      c = GeoIPSupport.get_country(ip)
-      if c:
-        plog("INFO", "[Echelon] IP "+ip+" is in ["+c+"]")
+      if c := GeoIPSupport.get_country(ip):
+        plog("INFO", f"[Echelon] IP {ip} is in [{c}]")
         self.exit_rstr.del_restriction(CountryRestriction)
         self.exit_rstr.add_restriction(CountryRestriction(c))
-      else: 
-        plog("INFO", "[Echelon] Could not determine destination country of IP "+ip)
+      else:
+        plog("INFO", f"[Echelon] Could not determine destination country of IP {ip}")
         # Try to use a backup country
         if self.geoip_config.exit_country:
           self.exit_rstr.del_restriction(CountryRestriction) 
@@ -893,7 +848,7 @@ class PathBuilder(TorCtl.EventHandler):
     self.low_prio_jobs = Queue.Queue()
     self.run_all_jobs = False
     self.do_reconfigure = False
-    plog("INFO", "Read "+str(len(self.sorted_r))+"/"+str(len(nslist))+" routers")
+    plog("INFO", f"Read {len(self.sorted_r)}/{len(nslist)} routers")
 
   def schedule_immediate(self, job):
     """
@@ -958,11 +913,13 @@ class PathBuilder(TorCtl.EventHandler):
     routers = self.c.read_routers(nslist)
     new_routers = []
     for r in routers:
-      self.name_to_key[r.nickname] = "$"+r.idhex
+      self.name_to_key[r.nickname] = f"${r.idhex}"
       if r.idhex in self.routers:
         if self.routers[r.idhex].nickname != r.nickname:
-          plog("NOTICE", "Router "+r.idhex+" changed names from "
-             +self.routers[r.idhex].nickname+" to "+r.nickname)
+          plog(
+              "NOTICE",
+              f"Router {r.idhex} changed names from {self.routers[r.idhex].nickname} to {r.nickname}",
+          )
         # Must do IN-PLACE update to keep all the refs to this router
         # valid and current (especially for stats)
         self.routers[r.idhex].update_to(r)
@@ -1064,13 +1021,20 @@ class PathBuilder(TorCtl.EventHandler):
   def stream_status_event(self, s):
     output = [s.event_name, str(s.strm_id), s.status, str(s.circ_id),
           s.target_host, str(s.target_port)]
-    if s.reason: output.append("REASON=" + s.reason)
-    if s.remote_reason: output.append("REMOTE_REASON=" + s.remote_reason)
+    if s.reason:
+      output.append(f"REASON={s.reason}")
+    if s.remote_reason:
+      output.append(f"REMOTE_REASON={s.remote_reason}")
     plog("DEBUG", " ".join(output))
     if not re.match(r"\d+.\d+.\d+.\d+", s.target_host):
       s.target_host = "255.255.255.255" # ignore DNS for exit policy check
-    if s.status == "NEW" or s.status == "NEWRESOLVE":
-      if s.status == "NEWRESOLVE" and not s.target_port:
+    if s.status == "NEW":
+      self.streams[s.strm_id] = Stream(s.strm_id, s.target_host, s.target_port, s.status)
+
+      self.attach_stream_any(self.streams[s.strm_id],
+                   self.streams[s.strm_id].detached_from)
+    elif s.status == "NEWRESOLVE":
+      if not s.target_port:
         s.target_port = self.resolve_port
       self.streams[s.strm_id] = Stream(s.strm_id, s.target_host, s.target_port, s.status)
 
@@ -1078,15 +1042,15 @@ class PathBuilder(TorCtl.EventHandler):
                    self.streams[s.strm_id].detached_from)
     elif s.status == "DETACHED":
       if s.strm_id not in self.streams:
-        plog("WARN", "Detached stream "+str(s.strm_id)+" not found")
+        plog("WARN", f"Detached stream {str(s.strm_id)} not found")
         self.streams[s.strm_id] = Stream(s.strm_id, s.target_host,
                       s.target_port, "NEW")
       # FIXME Stats (differentiate Resolved streams also..)
       if not s.circ_id:
-        plog("WARN", "Stream "+str(s.strm_id)+" detached from no circuit!")
+        plog("WARN", f"Stream {str(s.strm_id)} detached from no circuit!")
       else:
         self.streams[s.strm_id].detached_from.append(s.circ_id)
-      
+
       if self.streams[s.strm_id] in self.streams[s.strm_id].pending_circ.pending_streams:
         self.streams[s.strm_id].pending_circ.pending_streams.remove(self.streams[s.strm_id])
       self.streams[s.strm_id].pending_circ = None
@@ -1094,7 +1058,7 @@ class PathBuilder(TorCtl.EventHandler):
                    self.streams[s.strm_id].detached_from)
     elif s.status == "SUCCEEDED":
       if s.strm_id not in self.streams:
-        plog("NOTICE", "Succeeded stream "+str(s.strm_id)+" not found")
+        plog("NOTICE", f"Succeeded stream {str(s.strm_id)} not found")
         return
       if s.circ_id and self.streams[s.strm_id].pending_circ.circ_id != s.circ_id:
         # Hrmm.. this can happen on a new-nym.. Very rare, putting warn
@@ -1108,14 +1072,14 @@ class PathBuilder(TorCtl.EventHandler):
       self.streams[s.strm_id].pending_circ.pending_streams.remove(self.streams[s.strm_id])
       self.streams[s.strm_id].pending_circ = None
       self.streams[s.strm_id].attached_at = s.arrived_at
-    elif s.status == "FAILED" or s.status == "CLOSED":
+    elif s.status in ["FAILED", "CLOSED"]:
       # FIXME stats
       if s.strm_id not in self.streams:
-        plog("NOTICE", "Failed stream "+str(s.strm_id)+" not found")
+        plog("NOTICE", f"Failed stream {str(s.strm_id)} not found")
         return
 
       if not s.circ_id:
-        plog("WARN", "Stream "+str(s.strm_id)+" failed from no circuit!")
+        plog("WARN", f"Stream {str(s.strm_id)} failed from no circuit!")
 
       # We get failed and closed for each stream. OK to return 
       # and let the closed do the cleanup
@@ -1124,7 +1088,8 @@ class PathBuilder(TorCtl.EventHandler):
         # traffic. 
         self.streams[s.strm_id].failed = True
         if s.circ_id in self.circuits: self.circuits[s.circ_id].dirty = True
-        else: plog("WARN","Failed stream on unknown circ "+str(s.circ_id))
+        else:else
+          plog("WARN", f"Failed stream on unknown circ {str(s.circ_id)}")
         return
 
       if self.streams[s.strm_id].pending_circ:
@@ -1132,12 +1097,11 @@ class PathBuilder(TorCtl.EventHandler):
       del self.streams[s.strm_id]
     elif s.status == "REMAP":
       if s.strm_id not in self.streams:
-        plog("WARN", "Remap id "+str(s.strm_id)+" not found")
+        plog("WARN", f"Remap id {str(s.strm_id)} not found")
       else:
         if not re.match(r"\d+.\d+.\d+.\d+", s.target_host):
           s.target_host = "255.255.255.255"
-          plog("NOTICE", "Non-IP remap for "+str(s.strm_id)+" to "
-                   + s.target_host)
+          plog("NOTICE", f"Non-IP remap for {str(s.strm_id)} to {s.target_host}")
         self.streams[s.strm_id].host = s.target_host
         self.streams[s.strm_id].port = s.target_port
 
@@ -1145,22 +1109,20 @@ class PathBuilder(TorCtl.EventHandler):
     output = [s.event_name, str(s.strm_id), str(s.bytes_read),
               str(s.bytes_written)]
     plog("DEBUG", " ".join(output))
-    if not s.strm_id in self.streams:
-      plog("WARN", "BW event for unknown stream id: "+str(s.strm_id))
+    if s.strm_id not in self.streams:
+      plog("WARN", f"BW event for unknown stream id: {str(s.strm_id)}")
     else:
       self.streams[s.strm_id].bytes_read += s.bytes_read
       self.streams[s.strm_id].bytes_written += s.bytes_written
  
   def ns_event(self, n):
     self.read_routers(n.nslist)
-    plog("DEBUG", "Read " + str(len(n.nslist))+" NS => " 
-       + str(len(self.sorted_r)) + " routers")
+    plog("DEBUG", f"Read {len(n.nslist)} NS => {len(self.sorted_r)} routers")
   
   def new_desc_event(self, d):
     for i in d.idlist: # Is this too slow?
-      self.read_routers(self.c.get_network_status("id/"+i))
-    plog("DEBUG", "Read " + str(len(d.idlist))+" Desc => " 
-       + str(len(self.sorted_r)) + " routers")
+      self.read_routers(self.c.get_network_status(f"id/{i}"))
+    plog("DEBUG", f"Read {len(d.idlist)} Desc => {len(self.sorted_r)} routers")
 
   def bandwidth_event(self, b): pass # For heartbeat only..
 
@@ -1190,9 +1152,9 @@ class CircuitHandler(PathBuilder):
       plog("INFO", "Checked pool of circuits: we need to build " + 
          str(i) + " circuits")
     # Schedule (num_circs-n) circuit-buildups
-    while (n < self.num_circuits):      
+    while (n < self.num_circuits):    
       self.build_circuit("255.255.255.255", 80)
-      plog("DEBUG", "Scheduled circuit No. " + str(n+1))
+      plog("DEBUG", f"Scheduled circuit No. {str(n + 1)}")
       n += 1
 
   def build_circuit(self, host, port):
@@ -1292,7 +1254,7 @@ class StreamHandler(CircuitHandler):
     """ Send signal CLEARDNSCACHE """
     lines = self.c.sendAndRecv("SIGNAL CLEARDNSCACHE\r\n")
     for _, msg, more in lines:
-      plog("DEBUG", "CLEARDNSCACHE: " + msg)
+      plog("DEBUG", f"CLEARDNSCACHE: {msg}")
 
   def close_stream(self, id, reason):
     """ Close a stream with given id and reason """
@@ -1300,12 +1262,13 @@ class StreamHandler(CircuitHandler):
 
   def create_and_attach(self, stream, unattached_streams):
     """ Create a new circuit and attach (stream + unattached_streams) """
-    circ = self.build_circuit(stream.host, stream.port)
-    if circ:
+    if circ := self.build_circuit(stream.host, stream.port):
       for u in unattached_streams:
-        plog("DEBUG", "Attaching " + str(u.strm_id) + 
-           " pending build of circuit " + str(circ.circ_id))
-        u.pending_circ = circ      
+        plog(
+            "DEBUG",
+            f"Attaching {str(u.strm_id)} pending build of circuit {str(circ.circ_id)}",
+        )
+        u.pending_circ = circ
       circ.pending_streams.extend(unattached_streams)
       self.circuits[circ.circ_id] = circ
       self.last_exit = circ.exit
@@ -1453,8 +1416,7 @@ class StreamHandler(CircuitHandler):
     plog("DEBUG", " ".join(output))
 
   def unknown_event(self, event):
-    plog("DEBUG", "UNKNOWN EVENT '" + event.event_name + "':" + 
-       event.event_string)
+    plog("DEBUG", f"UNKNOWN EVENT '{event.event_name}':{event.event_string}")
 
 ########################## Unit tests ##########################
 
